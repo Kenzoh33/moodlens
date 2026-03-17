@@ -1,70 +1,117 @@
-# Getting Started with Create React App
+# 🌤️ MoodLens — AI-Powered Mental Wellness Tracker
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
-## Available Scripts
+## 🔗 Live Demo
+**[moodlens.vercel.app](https://moodlens.vercel.app)** ← update this after deploying
 
-In the project directory, you can run:
+---
 
-### `npm start`
+## 📖 About
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+MoodLens is an AI-powered mental wellness tracking web application that allows users to log daily mood, sleep, stress, and energy data. The system uses large language model AI to analyze behavioral patterns and generate personalized weekly wellness insights — addressing mental health equity gaps in underserved college student populations.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+**Research Question:** Can AI-detected behavioral patterns in self-reported mood data provide meaningful, personalized mental wellness insights for college students?
 
-### `npm test`
+---
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## ✨ Features
 
-### `npm run build`
+- 📝 **Daily Check-in** : Log mood (1–7), sleep, stress, energy, journal notes, and activity tags
+- 📊 **Live Dashboard** : Area charts, streak tracker, and stat cards updating in real time
+- 📅 **30-Day Mood Calendar** : Color-coded heatmap showing mood history at a glance
+- 🎯 **Wellness Goals** : Set and track weekly wellness targets with circular progress rings
+- 📓 **Journal History** : Searchable, filterable timeline of all past journal entries
+- 🤖 **AI Insights** : Weekly and monthly wellness reports powered by Llama 3 via Groq API
+- ✨ **Daily Quotes** : Personalized calming quotes based on current mood
+- ⚙️ **Settings & Profile** : Rich user profile with university, major, pronouns, and wellness goals
+- 🔐 **Authentication** : Secure login and signup via Firebase Auth
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+---
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 🛠️ Tech Stack
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+| Layer | Technology |
+|---|---|
+| Frontend | React.js, Recharts |
+| Authentication | Firebase Auth |
+| Database | Cloud Firestore |
+| AI / LLM | Llama 3.1 via Groq API |
+| Hosting | Vercel |
 
-### `npm run eject`
+---
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## 📸 Screenshots
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### Login
+![Login](screenshots/screenshot-login.jpeg)
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### Dashboard
+![Dashboard](screenshots/screenshot-dashboard.jpeg)
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### Daily Check-in
+![Check-in](screenshots/screenshot-checkin.jpeg)
 
-## Learn More
+### Wellness Goals
+![Goals](screenshots/screenshot-goals.jpeg)
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+### Journal History
+![Journal](screenshots/screenshot-journal.jpeg)
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### AI Insights
+![AI Insights](screenshots/screenshot-insights.jpeg)
 
-### Code Splitting
+### Settings & Profile
+![Settings](screenshots/screenshot-settings.jpeg)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+---
 
-### Analyzing the Bundle Size
+## 🚀 Getting Started
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### Prerequisites
+- Node.js 16+
+- A Firebase project (free)
+- A Groq API key (free at [console.groq.com](https://console.groq.com))
 
-### Making a Progressive Web App
+### Installation
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+```bash
+# Clone the repo
+git clone https://github.com/YOUR_USERNAME/moodlens.git
+cd moodlens
 
-### Advanced Configuration
+# Install dependencies
+npm install
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+# Create your environment file
+cp .env.example .env
+# Then fill in your keys in .env
 
-### Deployment
+# Start the app
+npm start
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+### Environment Variables
 
-### `npm run build` fails to minify
+Create a `.env` file in the root folder:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+```
+REACT_APP_GROQ_API_KEY=your_groq_api_key
+
+REACT_APP_FIREBASE_API_KEY=your_firebase_api_key
+REACT_APP_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+REACT_APP_FIREBASE_PROJECT_ID=your_project_id
+REACT_APP_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+REACT_APP_FIREBASE_APP_ID=your_app_id
+```
+
+---
+
+## 🔒 Security Note
+
+This project uses environment variables to protect all API keys. Never commit your `.env` file — it is listed in `.gitignore` by default.
+
+---
+
+##Author
+Rochak Ghimire
