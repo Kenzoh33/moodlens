@@ -2,7 +2,7 @@
 
 
 ## 🔗 Live Demo
-**[moodlens.vercel.app](https://moodlens.vercel.app)** ← update this after deploying
+**[moodlens.vercel.app](https://moodlens-kappa.vercel.app/)
 
 ---
 
