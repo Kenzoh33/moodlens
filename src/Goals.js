@@ -45,32 +45,33 @@ export default function Goals() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  const [error, setError] = useState("");
 
   const uid = auth.currentUser.uid;
 
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setError("");
+      try {
+        const goalsDoc = await getDoc(doc(db, "goals", uid));
+        if (goalsDoc.exists()) {
+          setActiveGoals(goalsDoc.data().goals || []);
+        } else {
+          setActiveGoals(["sleep7", "stress5", "mood5"]);
+        }
 
-      // Load saved goals
-      const goalsDoc = await getDoc(doc(db, "goals", uid));
-      if (goalsDoc.exists()) {
-        setActiveGoals(goalsDoc.data().goals || []);
-      } else {
-        // Default goals for new users
-        setActiveGoals(["sleep7", "stress5", "mood5"]);
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 6);
+        const weekAgoStr = weekAgo.toISOString().split("T")[0];
+
+        const q = query(collection(db, "moods"), where("uid", "==", uid));
+        const snap = await getDocs(q);
+        const all = snap.docs.map((d) => d.data());
+        setEntries(all.filter((e) => e.date >= weekAgoStr));
+      } catch (err) {
+        setError("Could not load your goals. Please refresh.");
       }
-
-      // Load this week's entries
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 6);
-      const weekAgoStr = weekAgo.toISOString().split("T")[0];
-
-      const q = query(collection(db, "moods"), where("uid", "==", uid));
-      const snap = await getDocs(q);
-      const all = snap.docs.map((d) => d.data());
-      const week = all.filter((e) => e.date >= weekAgoStr);
-      setEntries(week);
       setLoading(false);
     }
     load();
@@ -78,8 +79,12 @@ export default function Goals() {
 
   async function saveGoals(newGoals) {
     setSaving(true);
-    await setDoc(doc(db, "goals", uid), { goals: newGoals });
-    setActiveGoals(newGoals);
+    try {
+      await setDoc(doc(db, "goals", uid), { goals: newGoals });
+      setActiveGoals(newGoals);
+    } catch (err) {
+      setError("Could not save goals. Please try again.");
+    }
     setSaving(false);
   }
 
@@ -110,24 +115,31 @@ export default function Goals() {
   const myGoals = PRESET_GOALS.filter((g) => activeGoals.includes(g.id));
 
   if (loading) return (
-    <div style={{ textAlign: "center", padding: 60, color: "#6b6380", fontSize: 14 }}>
-      Loading your goals...
+    <div style={{ width: "100%" }}>
+      <div className="skeleton" style={{ height: 32, width: 200, marginBottom: 10 }} />
+      <div className="skeleton" style={{ height: 14, width: 300, marginBottom: 28 }} />
+      <div className="skeleton" style={{ height: 90, borderRadius: 18, marginBottom: 14 }} />
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="skeleton" style={{ height: 72, borderRadius: 16, marginBottom: 10 }} />
+      ))}
     </div>
   );
 
   return (
     <div style={styles.page}>
       <style>{`
-        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-        .gs { animation: fadeUp 0.35s ease both; }
         .goal-card:hover { border-color: #c8c0dc !important; }
         .preset-btn:hover { background: #f0eaf8 !important; border-color: #9d8ec4 !important; }
       `}</style>
 
-      <div className="gs" style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 24 }}>
         <h1 style={styles.pageTitle}>Wellness Goals 🎯</h1>
         <p style={styles.pageSubtitle}>Track your weekly wellness targets and build healthy habits</p>
       </div>
+
+      {error && (
+        <div style={styles.errorBox}>{error}</div>
+      )}
 
       {/* This week summary */}
       {myGoals.length > 0 && (
@@ -299,5 +311,10 @@ const styles = {
   checkmark: {
     position: "absolute", top: 6, right: 8,
     fontSize: 11, color: "#7c6fa0", fontWeight: 800,
+  },
+  errorBox: {
+    background: "#fdf5f5", border: "1px solid #f5c6c6",
+    borderRadius: 12, padding: "12px 16px",
+    color: "#c0392b", fontSize: 14, marginBottom: 14,
   },
 };

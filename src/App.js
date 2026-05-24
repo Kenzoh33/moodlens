@@ -1,45 +1,70 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "./AuthContext";
 import { auth } from "./firebase";
 import { signOut } from "firebase/auth";
 import AuthPage from "./AuthPage";
-import CheckIn from "./CheckIn";
-import Dashboard from "./Dashboard";
-import AIInsights from "./AIInsights";
-import Goals from "./Goals";
-import JournalHistory from "./JournalHistory";
-import Settings from "./Settings";
+import ErrorBoundary from "./ErrorBoundary";
+import DemoApp from "./DemoApp";
+
+const CheckIn      = lazy(() => import("./CheckIn"));
+const Dashboard    = lazy(() => import("./Dashboard"));
+const AIInsights   = lazy(() => import("./AIInsights"));
+const Goals        = lazy(() => import("./Goals"));
+const JournalHistory = lazy(() => import("./JournalHistory"));
+const Settings     = lazy(() => import("./Settings"));
+
+const tabs = [
+  { id: "dashboard", label: "Dashboard", icon: "📊" },
+  { id: "checkin",   label: "Check-in",  icon: "📝" },
+  { id: "goals",     label: "Goals",     icon: "🎯" },
+  { id: "journal",   label: "Journal",   icon: "📓" },
+  { id: "insights",  label: "AI Insights", icon: "🤖" },
+  { id: "settings",  label: "Settings",  icon: "⚙️" },
+];
+
+function TabSkeleton() {
+  return (
+    <div style={{ padding: "36px 40px" }}>
+      <div className="skeleton" style={{ height: 32, width: 200, marginBottom: 12 }} />
+      <div className="skeleton" style={{ height: 16, width: 280, marginBottom: 32 }} />
+      <div className="skeleton" style={{ height: 180, borderRadius: 18, marginBottom: 14 }} />
+      <div className="skeleton" style={{ height: 120, borderRadius: 18 }} />
+    </div>
+  );
+}
 
 function AppContent() {
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [activeTab, setActiveTab]   = useState("dashboard");
   const [refreshDash, setRefreshDash] = useState(0);
+  const [progressKey, setProgressKey] = useState(0);
 
-  if (!currentUser) return <AuthPage />;
+  const handleTabChange = useCallback((tabId) => {
+    setActiveTab(tabId);
+    setProgressKey((k) => k + 1);
+  }, []);
 
-  const tabs = [
-    { id: "dashboard", label: "Dashboard", icon: "📊" },
-    { id: "checkin", label: "Check-in", icon: "📝" },
-    { id: "goals", label: "Goals", icon: "🎯" },
-    { id: "journal", label: "Journal", icon: "📓" },
-    { id: "insights", label: "AI Insights", icon: "🤖" },
-    { id: "settings", label: "Settings", icon: "⚙️" },
-  ];
+  const handleCheckinSaved = useCallback(() => {
+    setRefreshDash((r) => r + 1);
+    handleTabChange("dashboard");
+  }, [handleTabChange]);
+
+  if (!currentUser && isDemoMode) {
+    return (
+      <DemoApp
+        onSignUp={() => setIsDemoMode(false)}
+        onSignIn={() => setIsDemoMode(false)}
+      />
+    );
+  }
+
+  if (!currentUser) return <AuthPage onDemo={() => setIsDemoMode(true)} />;
 
   return (
     <div style={styles.page}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap');
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body, #root { height: 100%; width: 100%; }
-        body { background: #f5f3ef; overflow-x: hidden; }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .tab-content { animation: fadeUp 0.3s ease; }
-        .nav-btn:hover { background: #ede9e3 !important; color: #3d3554 !important; }
-        .sign-out:hover { background: #ede9e3 !important; color: #3d3554 !important; }
-      `}</style>
-
-      <div style={styles.sidebar}>
+      {/* Desktop sidebar */}
+      <div className="sidebar-desktop" style={styles.sidebar}>
         <div style={styles.sidebarTop}>
           <div style={styles.logo}>
             <span style={styles.logoIcon}>🌤️</span>
@@ -50,7 +75,7 @@ function AppContent() {
               <button
                 key={tab.id}
                 className="nav-btn"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 style={{
                   ...styles.navBtn,
                   ...(activeTab === tab.id ? styles.navBtnActive : {}),
@@ -79,22 +104,49 @@ function AppContent() {
         </div>
       </div>
 
+      {/* Main content */}
       <div style={styles.main}>
-        <div style={styles.mainInner}>
-          <div className="tab-content" key={activeTab}>
-            {activeTab === "checkin" && (
-              <CheckIn onSaved={() => { setRefreshDash((r) => r + 1); setActiveTab("dashboard"); }} />
-            )}
-            {activeTab === "dashboard" && (
-              <Dashboard refresh={refreshDash} onCheckin={() => setActiveTab("checkin")} />
-            )}
-            {activeTab === "insights" && <AIInsights />}
-            {activeTab === "goals" && <Goals />}
-            {activeTab === "journal" && <JournalHistory />}
-            {activeTab === "settings" && <Settings />}
-          </div>
+        {/* Navigation progress bar */}
+        <div key={progressKey} className="nav-progress" />
+
+        <div className="main-scroll" style={styles.mainInner}>
+          <ErrorBoundary key={activeTab}>
+            <Suspense fallback={<TabSkeleton />}>
+              <div className="tab-content" key={activeTab}>
+                {activeTab === "checkin" && (
+                  <CheckIn onSaved={handleCheckinSaved} />
+                )}
+                {activeTab === "dashboard" && (
+                  <Dashboard refresh={refreshDash} onCheckin={() => handleTabChange("checkin")} />
+                )}
+                {activeTab === "insights" && <AIInsights />}
+                {activeTab === "goals"     && <Goals />}
+                {activeTab === "journal"   && <JournalHistory />}
+                {activeTab === "settings"  && <Settings />}
+              </div>
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
+
+      {/* Mobile bottom nav */}
+      <nav className="bottom-nav-mobile" style={{ display: "none" }}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => handleTabChange(tab.id)}
+            style={{
+              ...styles.mobileNavBtn,
+              color: activeTab === tab.id ? "#7c6fa0" : "#a09ab0",
+            }}
+          >
+            <span style={{ fontSize: 20 }}>{tab.icon}</span>
+            <span style={{ fontSize: 10, fontWeight: activeTab === tab.id ? 700 : 500 }}>
+              {tab.label}
+            </span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
@@ -109,26 +161,17 @@ export default function App() {
 
 const styles = {
   page: {
-    display: "flex",
-    minHeight: "100vh",
-    width: "100%",
+    display: "flex", minHeight: "100vh", width: "100%",
     background: "#f5f3ef",
     fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
+    position: "relative",
   },
   sidebar: {
-    width: 220,
-    minWidth: 220,
-    flexShrink: 0,
-    background: "#faf9f6",
-    borderRight: "1px solid #e8e4dc",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "space-between",
+    width: 220, minWidth: 220, flexShrink: 0,
+    background: "#faf9f6", borderRight: "1px solid #e8e4dc",
+    display: "flex", flexDirection: "column", justifyContent: "space-between",
     padding: "28px 14px",
-    position: "sticky",
-    top: 0,
-    height: "100vh",
-    overflowY: "auto",
+    position: "sticky", top: 0, height: "100vh", overflowY: "auto",
   },
   sidebarTop: { display: "flex", flexDirection: "column", gap: 32 },
   logo: { display: "flex", alignItems: "center", gap: 9, padding: "0 8px" },
@@ -145,9 +188,7 @@ const styles = {
     fontSize: 14, fontWeight: 500, cursor: "pointer",
     transition: "all 0.15s", textAlign: "left", width: "100%",
   },
-  navBtnActive: {
-    background: "#edeaf5", color: "#3d3554", fontWeight: 700,
-  },
+  navBtnActive: { background: "#edeaf5", color: "#3d3554", fontWeight: 700 },
   navIcon: { fontSize: 16 },
   sidebarBottom: { display: "flex", flexDirection: "column", gap: 10 },
   userCard: {
@@ -166,18 +207,17 @@ const styles = {
   signOutBtn: {
     padding: "9px", borderRadius: 10,
     border: "1px solid #e0dbd4", background: "transparent",
-    color: "#6b6380", fontSize: 13, cursor: "pointer",
-    transition: "all 0.15s", width: "100%",
+    color: "#6b6380", fontSize: 13, cursor: "pointer", transition: "all 0.15s", width: "100%",
   },
   main: {
-    flex: 1,
-    minWidth: 0,
-    overflowY: "auto",
-    overflowX: "hidden",
+    flex: 1, minWidth: 0, overflowY: "auto", overflowX: "hidden", position: "relative",
   },
   mainInner: {
-    width: "100%",
-    maxWidth: "100%",
-    padding: "36px 40px",
+    width: "100%", maxWidth: "100%", padding: "36px 40px",
+  },
+  mobileNavBtn: {
+    flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
+    gap: 3, padding: "8px 4px", border: "none", background: "transparent",
+    cursor: "pointer", transition: "color 0.15s",
   },
 };

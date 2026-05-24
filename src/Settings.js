@@ -36,6 +36,8 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [activeSection, setActiveSection] = useState("profile");
 
   // Password change
@@ -47,8 +49,13 @@ export default function Settings() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const snap = await getDoc(doc(db, "profiles", user.uid));
-      if (snap.exists()) setProfile((p) => ({ ...p, ...snap.data() }));
+      setLoadError("");
+      try {
+        const snap = await getDoc(doc(db, "profiles", user.uid));
+        if (snap.exists()) setProfile((p) => ({ ...p, ...snap.data() }));
+      } catch (err) {
+        setLoadError("Could not load your profile. Please refresh.");
+      }
       setLoading(false);
     }
     load();
@@ -56,9 +63,14 @@ export default function Settings() {
 
   async function saveProfile() {
     setSaving(true);
-    await setDoc(doc(db, "profiles", user.uid), profile);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setSaveError("");
+    try {
+      await setDoc(doc(db, "profiles", user.uid), profile);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setSaveError("Could not save your profile. Please try again.");
+    }
     setSaving(false);
   }
 
@@ -94,8 +106,20 @@ export default function Settings() {
   ];
 
   if (loading) return (
-    <div style={{ textAlign: "center", padding: 60, color: "#6b6380", fontSize: 14 }}>
-      Loading your profile...
+    <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+      <div className="skeleton" style={{ width: 200, height: 280, borderRadius: 18, flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        <div className="skeleton" style={{ height: 32, width: 220, marginBottom: 10 }} />
+        <div className="skeleton" style={{ height: 14, width: 280, marginBottom: 24 }} />
+        <div className="skeleton" style={{ height: 260, borderRadius: 18 }} />
+      </div>
+    </div>
+  );
+
+  if (loadError) return (
+    <div style={{ padding: "60px 0", textAlign: "center" }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+      <p style={{ fontSize: 14, color: "#6b6380" }}>{loadError}</p>
     </div>
   );
 
@@ -390,14 +414,17 @@ export default function Settings() {
 
           {/* Save button */}
           {activeSection !== "account" && (
-            <button
-              className="save-btn"
-              onClick={saveProfile}
-              disabled={saving}
-              style={{ ...styles.saveBtn, ...(saved ? styles.saveBtnSaved : {}) }}
-            >
-              {saved ? "✅ Saved!" : saving ? "Saving..." : "Save changes"}
-            </button>
+            <>
+              {saveError && <div style={styles.saveErrorBox}>{saveError}</div>}
+              <button
+                className="save-btn"
+                onClick={saveProfile}
+                disabled={saving}
+                style={{ ...styles.saveBtn, ...(saved ? styles.saveBtnSaved : {}) }}
+              >
+                {saved ? "✅ Saved!" : saving ? "Saving..." : "Save changes"}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -484,4 +511,9 @@ const styles = {
     alignSelf: "flex-start",
   },
   saveBtnSaved: { background: "linear-gradient(135deg, #a8d5b5, #7dba9a)" },
+  saveErrorBox: {
+    background: "#fdf5f5", border: "1px solid #f5c6c6",
+    borderRadius: 10, padding: "10px 14px",
+    color: "#c0392b", fontSize: 13, marginBottom: 10,
+  },
 };

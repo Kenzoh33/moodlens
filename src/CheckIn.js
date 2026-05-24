@@ -27,6 +27,7 @@ export default function CheckIn({ onSaved }) {
   const [tags, setTags] = useState([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   function toggleTag(tag) {
     setTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
@@ -46,7 +47,7 @@ export default function CheckIn({ onSaved }) {
       setSaved(true);
       setTimeout(() => { setSaved(false); onSaved && onSaved(); }, 1200);
     } catch (err) {
-      alert("Error saving: " + err.message);
+      setSaveError("Could not save your check-in. Please try again.");
     }
     setSaving(false);
   }
@@ -173,6 +174,10 @@ export default function CheckIn({ onSaved }) {
           <div style={styles.charCount}>{journal.length} characters</div>
         </div>
 
+        {saveError && (
+          <div style={styles.errorBox}>{saveError}</div>
+        )}
+
         <button
           type="submit"
           style={{ ...styles.submitBtn, ...(saved ? styles.savedBtn : {}) }}
@@ -241,4 +246,9 @@ const styles = {
     boxShadow: "0 4px 16px rgba(157,142,196,0.3)",
   },
   savedBtn: { background: "linear-gradient(135deg, #a8d5b5, #7dba9a)" },
+  errorBox: {
+    background: "#fdf5f5", border: "1px solid #f5c6c6",
+    borderRadius: 12, padding: "12px 16px",
+    color: "#c0392b", fontSize: 14, marginBottom: 10, maxWidth: 680,
+  },
 };

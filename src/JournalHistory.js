@@ -9,6 +9,7 @@ const moodColors = ["", "#e8998d", "#e8b98d", "#e8d98d", "#a8c9a0", "#7dba9a", "
 export default function JournalHistory() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filterMood, setFilterMood] = useState("all");
   const [sortOrder, setSortOrder] = useState("newest");
@@ -16,13 +17,18 @@ export default function JournalHistory() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const q = query(collection(db, "moods"), where("uid", "==", auth.currentUser.uid));
-      const snap = await getDocs(q);
-      const all = snap.docs
-        .map((d) => d.data())
-        .filter((e) => e.journal && e.journal.trim().length > 0)
-        .sort((a, b) => (a.date > b.date ? -1 : 1));
-      setEntries(all);
+      setError("");
+      try {
+        const q = query(collection(db, "moods"), where("uid", "==", auth.currentUser.uid));
+        const snap = await getDocs(q);
+        const all = snap.docs
+          .map((d) => d.data())
+          .filter((e) => e.journal && e.journal.trim().length > 0)
+          .sort((a, b) => (a.date > b.date ? -1 : 1));
+        setEntries(all);
+      } catch (err) {
+        setError("Could not load your journal entries. Please refresh.");
+      }
       setLoading(false);
     }
     load();
@@ -116,10 +122,26 @@ export default function JournalHistory() {
         </select>
       </div>
 
-      {/* Loading */}
+      {/* Error */}
+      {error && (
+        <div style={styles.errorBox}>{error}</div>
+      )}
+
+      {/* Loading skeleton */}
       {loading && (
-        <div style={{ textAlign: "center", padding: 60, color: "#6b6380", fontSize: 14 }}>
-          Loading your journal...
+        <div>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ marginBottom: 28 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <div className="skeleton" style={{ width: 10, height: 10, borderRadius: "50%" }} />
+                <div className="skeleton" style={{ height: 14, width: 120 }} />
+              </div>
+              <div style={{ paddingLeft: 20, borderLeft: "2px solid #f0ede8" }}>
+                <div className="skeleton" style={{ height: 100, borderRadius: 14, marginBottom: 10 }} />
+                <div className="skeleton" style={{ height: 100, borderRadius: 14 }} />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -248,4 +270,9 @@ const styles = {
   entryText: { margin: "0 0 10px", fontSize: 14, color: "#3d3554", lineHeight: 1.7 },
   tagRow: { display: "flex", flexWrap: "wrap", gap: 6 },
   tag: { fontSize: 11, color: "#6b6380", background: "#f0ede8", padding: "3px 9px", borderRadius: 99, fontWeight: 500 },
+  errorBox: {
+    background: "#fdf5f5", border: "1px solid #f5c6c6",
+    borderRadius: 12, padding: "12px 16px",
+    color: "#c0392b", fontSize: 14, marginBottom: 16,
+  },
 };

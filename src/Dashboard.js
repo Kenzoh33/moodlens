@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { db, auth } from "./firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import {
@@ -7,21 +7,19 @@ import {
 } from "recharts";
 import MoodQuote from "./MoodQuote";
 
-const moodEmojis = ["", "😞", "😟", "😐", "🙂", "😊", "😄", "🤩"];
-const moodColors = ["", "#e8998d", "#e8b98d", "#e8d98d", "#a8c9a0", "#7dba9a", "#6aacb8", "#9b8ec4"];
-const moodLabels = ["", "Terrible", "Bad", "Neutral", "Okay", "Good", "Great", "Amazing"];
+const moodEmojis  = ["", "😞", "😟", "😐", "🙂", "😊", "😄", "🤩"];
+const moodColors  = ["", "#e8998d", "#e8b98d", "#e8d98d", "#a8c9a0", "#7dba9a", "#6aacb8", "#9b8ec4"];
+const moodLabels  = ["", "Terrible", "Bad", "Neutral", "Okay", "Good", "Great", "Amazing"];
 
 function getMoodColor(mood) {
   return moodColors[Math.round(mood)] || "#c8c4d4";
 }
 
-// Average multiple entries on the same date into one data point
 function groupByDate(entries) {
   const map = {};
   entries.forEach((e) => {
-    const d = e.date;
-    if (!map[d]) map[d] = [];
-    map[d].push(e);
+    if (!map[e.date]) map[e.date] = [];
+    map[e.date].push(e);
   });
   return Object.entries(map)
     .sort(([a], [b]) => (a > b ? 1 : -1))
@@ -38,45 +36,50 @@ function groupByDate(entries) {
     }));
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div style={{
-        background: "#faf9f6", border: "1px solid #e8e4dc",
-        borderRadius: 10, padding: "10px 14px",
-        boxShadow: "0 4px 16px rgba(60,53,80,0.10)",
-        fontFamily: "'DM Sans', sans-serif",
-      }}>
-        <p style={{ margin: "0 0 6px", color: "#6b6380", fontSize: 12, fontWeight: 600 }}>{label}</p>
-        {payload.map((p, i) => {
-          const unit = p.dataKey === "mood" ? "/7" : p.dataKey === "sleep" ? "h" : "/10";
-          return (
-            <p key={i} style={{ margin: "3px 0", color: p.color, fontSize: 13, fontWeight: 700 }}>
-              {p.dataKey.charAt(0).toUpperCase() + p.dataKey.slice(1)}: {p.value}{unit}
-            </p>
-          );
-        })}
-      </div>
-    );
-  }
-  return null;
-};
+// ── Memoised sub-components ──────────────────────────
 
-function CalendarHeatmap({ dailyData }) {
+const CustomTooltip = memo(({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: "#faf9f6", border: "1px solid #e8e4dc",
+      borderRadius: 10, padding: "10px 14px",
+      boxShadow: "0 4px 16px rgba(60,53,80,0.10)",
+      fontFamily: "'DM Sans', sans-serif",
+    }}>
+      <p style={{ margin: "0 0 6px", color: "#6b6380", fontSize: 12, fontWeight: 600 }}>{label}</p>
+      {payload.map((p, i) => {
+        const unit = p.dataKey === "mood" ? "/7" : p.dataKey === "sleep" ? "h" : "/10";
+        return (
+          <p key={i} style={{ margin: "3px 0", color: p.color, fontSize: 13, fontWeight: 700 }}>
+            {p.dataKey.charAt(0).toUpperCase() + p.dataKey.slice(1)}: {p.value}{unit}
+          </p>
+        );
+      })}
+    </div>
+  );
+});
+
+const CalendarHeatmap = memo(function CalendarHeatmap({ dailyData }) {
   const today = new Date();
   const todayStr = today.toISOString().split("T")[0];
-  const days = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    const dateStr = d.toISOString().split("T")[0];
-    const entry = dailyData.find((e) => e.date === dateStr);
-    days.push({
-      date: dateStr, day: d.getDate(),
-      mood: entry ? entry.rawMood : 0,
-      label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    });
-  }
+  const days = useMemo(() => {
+    const result = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      const entry = dailyData.find((e) => e.date === dateStr);
+      result.push({
+        date: dateStr, day: d.getDate(),
+        mood: entry ? entry.rawMood : 0,
+        label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      });
+    }
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyData]);
+
   return (
     <div>
       <div style={calStyles.grid}>
@@ -109,18 +112,22 @@ function CalendarHeatmap({ dailyData }) {
       </div>
     </div>
   );
-}
+});
 
-function StreakCard({ dailyData }) {
-  const today = new Date();
-  let streak = 0;
-  let d = new Date(today);
-  while (true) {
-    const dateStr = d.toISOString().split("T")[0];
-    if (dailyData.find((e) => e.date === dateStr)) { streak++; d.setDate(d.getDate() - 1); }
-    else break;
-  }
-  const hasToday = dailyData.find((e) => e.date === today.toISOString().split("T")[0]);
+const StreakCard = memo(function StreakCard({ dailyData }) {
+  const { streak, hasToday } = useMemo(() => {
+    const today = new Date();
+    let s = 0;
+    let d = new Date(today);
+    while (true) {
+      const dateStr = d.toISOString().split("T")[0];
+      if (dailyData.find((e) => e.date === dateStr)) { s++; d.setDate(d.getDate() - 1); }
+      else break;
+    }
+    const ht = !!dailyData.find((e) => e.date === today.toISOString().split("T")[0]);
+    return { streak: s, hasToday: ht };
+  }, [dailyData]);
+
   return (
     <div style={streakStyles.card}>
       <div style={{ fontSize: 34 }}>{streak > 2 ? "🔥" : streak > 0 ? "✨" : "💤"}</div>
@@ -129,31 +136,31 @@ function StreakCard({ dailyData }) {
       {!hasToday && <div style={streakStyles.nudge}>Log today to keep it going!</div>}
     </div>
   );
-}
+});
 
-// Single entry chart shown when only 1 day of data exists
-function SingleDayChart({ entry }) {
+const SingleDayChart = memo(function SingleDayChart({ entry }) {
   const bars = [
-    { label: "Mood", value: entry.mood, max: 7, color: "#9d8ec4" },
-    { label: "Sleep", value: entry.sleep, max: 12, color: "#7dba9a" },
+    { label: "Mood",   value: entry.mood,   max: 7,  color: "#9d8ec4" },
+    { label: "Sleep",  value: entry.sleep,  max: 12, color: "#7dba9a" },
     { label: "Energy", value: entry.energy, max: 10, color: "#6aacb8" },
     { label: "Stress", value: entry.stress, max: 10, color: "#e8998d" },
   ];
   return (
     <div style={{ padding: "8px 0" }}>
       <p style={{ fontSize: 13, color: "#6b6380", margin: "0 0 16px", lineHeight: 1.6 }}>
-        You have <strong style={{ color: "#3d3554" }}>1 day</strong> of data so far — add check-ins on more days to see your trend lines. Here's a snapshot of your current stats:
+        You have <strong style={{ color: "#3d3554" }}>1 day</strong> of data so far — add check-ins on more days to see your trend lines.
       </p>
       {bars.map((b) => (
         <div key={b.label} style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "#3d3554" }}>{b.label}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: b.color }}>{b.value}{b.label === "Sleep" ? "h" : b.label === "Mood" ? "/7" : "/10"}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: b.color }}>
+              {b.value}{b.label === "Sleep" ? "h" : b.label === "Mood" ? "/7" : "/10"}
+            </span>
           </div>
           <div style={{ height: 8, background: "#f0ede8", borderRadius: 99, overflow: "hidden" }}>
             <div style={{
-              height: "100%", borderRadius: 99,
-              background: b.color,
+              height: "100%", borderRadius: 99, background: b.color,
               width: `${(b.value / b.max) * 100}%`,
               transition: "width 0.6s ease",
             }} />
@@ -162,31 +169,83 @@ function SingleDayChart({ entry }) {
       ))}
     </div>
   );
+});
+
+// ── Skeleton loader for dashboard ────────────────────
+
+function DashboardSkeleton() {
+  return (
+    <div style={{ width: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 28 }}>
+        <div>
+          <div className="skeleton" style={{ height: 30, width: 220, marginBottom: 10 }} />
+          <div className="skeleton" style={{ height: 14, width: 160 }} />
+        </div>
+        <div className="skeleton" style={{ height: 60, width: 140, borderRadius: 14 }} />
+      </div>
+      <div className="skeleton" style={{ height: 80, borderRadius: 16, marginBottom: 16 }} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="skeleton" style={{ height: 72, borderRadius: 14 }} />
+        ))}
+      </div>
+      <div className="skeleton" style={{ height: 220, borderRadius: 18, marginBottom: 14 }} />
+      <div className="skeleton" style={{ height: 180, borderRadius: 18, marginBottom: 14 }} />
+    </div>
+  );
 }
+
+// ── Main component ───────────────────────────────────
 
 export default function Dashboard({ refresh, onCheckin }) {
   const [rawEntries, setRawEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState("");
 
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      try {
-        const q = query(collection(db, "moods"), where("uid", "==", auth.currentUser.uid));
-        const snap = await getDocs(q);
-        const data = snap.docs.map((doc) => doc.data());
-        setRawEntries(data);
-      } catch (err) {
-        console.error("Fetch error:", err);
-      }
-      setLoading(false);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const q = query(collection(db, "moods"), where("uid", "==", auth.currentUser.uid));
+      const snap = await getDocs(q);
+      setRawEntries(snap.docs.map((doc) => doc.data()));
+    } catch (err) {
+      setError("Could not load your data. Please refresh the page.");
+      console.error("Fetch error:", err);
     }
-    fetchData();
-  }, [refresh]);
+    setLoading(false);
+  }, []);
 
-  if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300 }}>
-      <div style={{ color: "#6b6380", fontSize: 14 }}>Loading your data...</div>
+  useEffect(() => { fetchData(); }, [refresh, fetchData]);
+
+  // Expensive derivations — only recalculate when rawEntries changes
+  const dailyData = useMemo(() => groupByDate(rawEntries), [rawEntries]);
+  const chartData = useMemo(() => dailyData.slice(-14), [dailyData]);
+  const weekData  = useMemo(() => dailyData.slice(-7),  [dailyData]);
+
+  const weekAvgMood = useMemo(() =>
+    weekData.length
+      ? Number((weekData.reduce((s, e) => s + e.mood, 0) / weekData.length).toFixed(1))
+      : 0,
+  [weekData]);
+
+  const avgAll = useCallback((key) =>
+    dailyData.length
+      ? Number((dailyData.reduce((s, e) => s + e[key], 0) / dailyData.length).toFixed(1))
+      : 0,
+  [dailyData]);
+
+  const avgSleep  = useMemo(() => avgAll("sleep"),  [avgAll]);
+  const avgStress = useMemo(() => avgAll("stress"), [avgAll]);
+
+  if (loading) return <DashboardSkeleton />;
+
+  if (error) return (
+    <div style={styles.emptyState}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+      <h2 style={styles.emptyTitle}>Couldn't load your data</h2>
+      <p style={styles.emptyText}>{error}</p>
+      <button onClick={fetchData} style={styles.ctaBtn}>Try again</button>
     </div>
   );
 
@@ -199,30 +258,14 @@ export default function Dashboard({ refresh, onCheckin }) {
     </div>
   );
 
-  const dailyData = groupByDate(rawEntries);
   const latest = dailyData[dailyData.length - 1];
-  const chartData = dailyData.slice(-14);
-  const weekData = dailyData.slice(-7);
   const hasMultipleDays = dailyData.length >= 2;
-
-  const avgAll = (key) =>
-    Number((dailyData.reduce((s, e) => s + e[key], 0) / dailyData.length).toFixed(1));
-
-  const weekAvgMood =
-    Number((weekData.reduce((s, e) => s + e.mood, 0) / weekData.length).toFixed(1));
-
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
     <div style={styles.page}>
-      <style>{`
-        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-        .ds { animation: fadeUp 0.35s ease both; }
-      `}</style>
-
-      {/* Header */}
-      <div className="ds" style={styles.headerRow}>
+      <div style={styles.headerRow}>
         <div>
           <h1 style={styles.pageTitle}>{greeting} 👋</h1>
           <p style={styles.pageSubtitle}>
@@ -238,17 +281,15 @@ export default function Dashboard({ refresh, onCheckin }) {
         </div>
       </div>
 
-      {/* Quote */}
       <MoodQuote mood={latest?.rawMood} />
 
-      {/* Stats + Streak */}
-      <div className="ds" style={{ ...styles.row, animationDelay: "0.05s", marginBottom: 16 }}>
+      <div style={{ ...styles.row, marginBottom: 16 }}>
         <div style={styles.statsGrid}>
           {[
-            { label: "7-day avg mood", value: `${weekAvgMood}/7`, color: "#9d8ec4" },
-            { label: "Avg sleep", value: `${avgAll("sleep")}h`, color: "#7dba9a" },
-            { label: "Avg stress", value: `${avgAll("stress")}/10`, color: "#e8998d" },
-            { label: "Total check-ins", value: rawEntries.length, color: "#6aacb8" },
+            { label: "7-day avg mood",  value: `${weekAvgMood}/7`,    color: "#9d8ec4" },
+            { label: "Avg sleep",       value: `${avgSleep}h`,        color: "#7dba9a" },
+            { label: "Avg stress",      value: `${avgStress}/10`,     color: "#e8998d" },
+            { label: "Total check-ins", value: rawEntries.length,     color: "#6aacb8" },
           ].map((s, i) => (
             <div key={i} style={styles.statCard}>
               <div style={{ ...styles.statValue, color: s.color }}>{s.value}</div>
@@ -259,13 +300,10 @@ export default function Dashboard({ refresh, onCheckin }) {
         <StreakCard dailyData={dailyData} />
       </div>
 
-      {/* Mood chart */}
-      <div className="ds" style={{ ...styles.card, animationDelay: "0.1s", marginBottom: 16 }}>
+      <div style={{ ...styles.card, marginBottom: 16 }}>
         <h3 style={styles.cardTitle}>
           Mood over time
-          {hasMultipleDays && (
-            <span style={styles.chartNote}> — {chartData.length} days</span>
-          )}
+          {hasMultipleDays && <span style={styles.chartNote}> — {chartData.length} days</span>}
         </h3>
         {!hasMultipleDays ? (
           <SingleDayChart entry={latest} />
@@ -274,7 +312,7 @@ export default function Dashboard({ refresh, onCheckin }) {
             <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="moodGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#b8a9d9" stopOpacity={0.35} />
+                  <stop offset="5%"  stopColor="#b8a9d9" stopOpacity={0.35} />
                   <stop offset="95%" stopColor="#b8a9d9" stopOpacity={0} />
                 </linearGradient>
               </defs>
@@ -291,8 +329,7 @@ export default function Dashboard({ refresh, onCheckin }) {
         )}
       </div>
 
-      {/* Sleep & Stress */}
-      <div className="ds" style={{ ...styles.card, animationDelay: "0.15s", marginBottom: 16 }}>
+      <div style={{ ...styles.card, marginBottom: 16 }}>
         <h3 style={styles.cardTitle}>Sleep & stress</h3>
         {!hasMultipleDays ? (
           <p style={{ fontSize: 13, color: "#6b6380", margin: 0, padding: "12px 0" }}>
@@ -306,7 +343,7 @@ export default function Dashboard({ refresh, onCheckin }) {
                 <XAxis dataKey="shortDate" tick={{ fill: "#6b6380", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: "#6b6380", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} />
-                <Line type="monotone" dataKey="sleep" stroke="#7dba9a" strokeWidth={2.5}
+                <Line type="monotone" dataKey="sleep"  stroke="#7dba9a" strokeWidth={2.5}
                   dot={{ fill: "#7dba9a", r: 4, strokeWidth: 0 }} activeDot={{ r: 6, fill: "#5a9e7a" }} />
                 <Line type="monotone" dataKey="stress" stroke="#e8998d" strokeWidth={2.5}
                   dot={{ fill: "#e8998d", r: 4, strokeWidth: 0 }} activeDot={{ r: 6, fill: "#c87060" }} />
@@ -323,18 +360,16 @@ export default function Dashboard({ refresh, onCheckin }) {
         )}
       </div>
 
-      {/* Calendar */}
-      <div className="ds" style={{ ...styles.card, animationDelay: "0.2s", marginBottom: 16 }}>
+      <div style={{ ...styles.card, marginBottom: 16 }}>
         <h3 style={styles.cardTitle}>30-day mood calendar</h3>
         <CalendarHeatmap dailyData={dailyData} />
       </div>
 
-      {/* Recent journals */}
-      {rawEntries.filter((e) => e.journal && e.journal.trim()).length > 0 && (
-        <div className="ds" style={{ ...styles.card, animationDelay: "0.25s" }}>
+      {rawEntries.filter((e) => e.journal?.trim()).length > 0 && (
+        <div style={styles.card}>
           <h3 style={styles.cardTitle}>Recent journal entries</h3>
           {rawEntries
-            .filter((e) => e.journal && e.journal.trim())
+            .filter((e) => e.journal?.trim())
             .sort((a, b) => (a.createdAt?.seconds > b.createdAt?.seconds ? -1 : 1))
             .slice(0, 3)
             .map((e, i) => (

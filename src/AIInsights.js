@@ -1,20 +1,85 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { db, auth } from "./firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 
-export default function AIInsights() {
-  const [insight, setInsight] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [reportType, setReportType] = useState("weekly");
+function cacheKey(uid, reportType) {
+  const today = new Date().toISOString().split("T")[0];
+  return `ml_ai_${uid}_${reportType}_${today}`;
+}
 
-  async function generateInsights() {
+function loadFromCache(uid, reportType) {
+  try {
+    const raw = localStorage.getItem(cacheKey(uid, reportType));
+    if (!raw) return null;
+    const { text } = JSON.parse(raw);
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
+function saveToCache(uid, reportType, text) {
+  try {
+    localStorage.setItem(cacheKey(uid, reportType), JSON.stringify({ text }));
+  } catch {
+    // localStorage full or unavailable — silently skip
+  }
+}
+
+function InsightSkeleton() {
+  return (
+    <div style={{ maxWidth: 680 }}>
+      <div style={{ marginBottom: 10 }}>
+        <div className="skeleton" style={{ height: 14, width: "60%", marginBottom: 8 }} />
+        <div className="skeleton" style={{ height: 14, width: "90%" }} />
+      </div>
+      {[80, 95, 70, 88, 75].map((w, i) => (
+        <div key={i} className="skeleton" style={{ height: 14, width: `${w}%`, marginBottom: 8 }} />
+      ))}
+      <div style={{ marginTop: 20, marginBottom: 10 }}>
+        <div className="skeleton" style={{ height: 14, width: "40%", marginBottom: 8 }} />
+        {[90, 85, 78].map((w, i) => (
+          <div key={i} className="skeleton" style={{ height: 14, width: `${w}%`, marginBottom: 8 }} />
+        ))}
+      </div>
+      {[88, 72, 60].map((w, i) => (
+        <div key={i} className="skeleton" style={{ height: 14, width: `${w}%`, marginBottom: 8 }} />
+      ))}
+    </div>
+  );
+}
+
+export default function AIInsights() {
+  const [insight, setInsight]       = useState("");
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState("");
+  const [reportType, setReportType] = useState("weekly");
+  const [fromCache, setFromCache]   = useState(false);
+
+  const uid = auth.currentUser?.uid;
+
+  // Restore cached result when reportType changes
+  useEffect(() => {
+    if (!uid) return;
+    const cached = loadFromCache(uid, reportType);
+    if (cached) {
+      setInsight(cached);
+      setFromCache(true);
+    } else {
+      setInsight("");
+      setFromCache(false);
+    }
+    setError("");
+  }, [reportType, uid]);
+
+  const generateInsights = useCallback(async () => {
     setLoading(true);
     setError("");
     setInsight("");
+    setFromCache(false);
 
     try {
-      const q = query(collection(db, "moods"), where("uid", "==", auth.currentUser.uid));
+      const q = query(collection(db, "moods"), where("uid", "==", uid));
       const snap = await getDocs(q);
       const allEntries = snap.docs
         .map((doc) => doc.data())
@@ -32,8 +97,8 @@ export default function AIInsights() {
         `Date: ${e.date}, Mood: ${e.mood}/7, Sleep: ${e.sleep}h, Stress: ${e.stress}/10, Energy: ${e.energy || "N/A"}/10, Activities: ${e.tags?.join(", ") || "none"}${e.journal ? `, Note: "${e.journal}"` : ""}`
       ).join("\n");
 
-      const avgMood = (entries.reduce((s, e) => s + e.mood, 0) / entries.length).toFixed(1);
-      const avgSleep = (entries.reduce((s, e) => s + e.sleep, 0) / entries.length).toFixed(1);
+      const avgMood  = (entries.reduce((s, e) => s + e.mood,   0) / entries.length).toFixed(1);
+      const avgSleep = (entries.reduce((s, e) => s + e.sleep,  0) / entries.length).toFixed(1);
       const avgStress = (entries.reduce((s, e) => s + e.stress, 0) / entries.length).toFixed(1);
 
       const prompt = `You are a warm, caring AI wellness coach. Analyze this user's ${reportType === "weekly" ? "past 7 days" : "past 30 days"} of mood tracking data and write a gentle, supportive wellness report.
@@ -77,14 +142,19 @@ Keep the tone calm, encouraging, and personal — like a caring friend. Referenc
       });
 
       const data = await response.json();
-      if (data.error) { setError("Error: " + data.error.message); setLoading(false); return; }
+      if (data.error) {
+        setError("Error: " + data.error.message);
+        setLoading(false);
+        return;
+      }
       const text = data.choices?.[0]?.message?.content || "No response received.";
       setInsight(text);
+      saveToCache(uid, reportType, text);
     } catch (err) {
       setError("Could not generate insights. Check your API key and try again.");
     }
     setLoading(false);
-  }
+  }, [uid, reportType]);
 
   function formatInsight(text) {
     return text.split("\n").filter(Boolean).map((line, i) => {
@@ -98,39 +168,34 @@ Keep the tone calm, encouraging, and personal — like a caring friend. Referenc
 
   return (
     <div style={styles.page}>
-      <style>{`
-        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .ai-s { animation: fadeUp 0.35s ease both; }
-        .type-btn:hover { border-color: #9d8ec4 !important; background: #f0eaf8 !important; color: #5c4a8a !important; }
-      `}</style>
-
-      <div className="ai-s" style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 24 }}>
         <h1 style={styles.pageTitle}>AI Insights 🤖</h1>
         <p style={styles.pageSubtitle}>Personalized wellness analysis from your data</p>
       </div>
 
-      <div className="ai-s" style={{ ...styles.card, animationDelay: "0.05s", marginBottom: 14, maxWidth: 680 }}>
+      <div style={{ ...styles.card, marginBottom: 14, maxWidth: 680 }}>
         <div style={styles.cardLabel}>Generate your wellness report</div>
         <p style={styles.cardDesc}>
           Choose a time range and let AI analyze your patterns to give you personalized insights and gentle suggestions.
+          {fromCache && (
+            <span style={styles.cachedBadge}>✓ Cached — refreshes daily</span>
+          )}
         </p>
 
         <div style={styles.typeRow}>
           {[
-            { key: "weekly", label: "📅 Last 7 days" },
+            { key: "weekly",  label: "📅 Last 7 days" },
             { key: "monthly", label: "🗓️ Last 30 days" },
           ].map((t) => (
             <button
               key={t.key}
-              className="type-btn"
               onClick={() => setReportType(t.key)}
               style={{
                 ...styles.typeBtn,
-                background: reportType === t.key ? "#f0eaf8" : "#f5f3ef",
-                border: reportType === t.key ? "1.5px solid #9d8ec4" : "1.5px solid #d8d3cc",
-                color: reportType === t.key ? "#5c4a8a" : "#4a4460",
-                fontWeight: reportType === t.key ? 700 : 500,
+                background:   reportType === t.key ? "#f0eaf8" : "#f5f3ef",
+                border:       reportType === t.key ? "1.5px solid #9d8ec4" : "1.5px solid #d8d3cc",
+                color:        reportType === t.key ? "#5c4a8a" : "#4a4460",
+                fontWeight:   reportType === t.key ? 700 : 500,
               }}
             >
               {t.label}
@@ -144,17 +209,32 @@ Keep the tone calm, encouraging, and personal — like a caring friend. Referenc
               <div style={styles.spinner} /> Analyzing your data...
             </span>
           ) : (
-            `✨ Generate ${reportType === "weekly" ? "Weekly" : "Monthly"} Report`
+            `✨ ${fromCache ? "Regenerate" : "Generate"} ${reportType === "weekly" ? "Weekly" : "Monthly"} Report`
           )}
         </button>
       </div>
 
       {error && (
-        <div className="ai-s" style={styles.errorBox}>⚠️ {error}</div>
+        <div style={{ ...styles.errorBox, maxWidth: 680 }}>⚠️ {error}</div>
       )}
 
-      {insight && (
-        <div className="ai-s" style={{ ...styles.reportCard, animationDelay: "0.05s", maxWidth: 680 }}>
+      {/* Skeleton while loading */}
+      {loading && (
+        <div style={{ ...styles.reportCard, maxWidth: 680, padding: "24px 22px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+            <div className="skeleton" style={{ width: 40, height: 40, borderRadius: "50%" }} />
+            <div>
+              <div className="skeleton" style={{ height: 16, width: 200, marginBottom: 6 }} />
+              <div className="skeleton" style={{ height: 12, width: 120 }} />
+            </div>
+          </div>
+          <div className="skeleton" style={{ height: 1, marginBottom: 18 }} />
+          <InsightSkeleton />
+        </div>
+      )}
+
+      {insight && !loading && (
+        <div style={{ ...styles.reportCard, maxWidth: 680 }}>
           <div style={styles.reportHeader}>
             <span style={{ fontSize: 30 }}>🧠</span>
             <div>
@@ -163,6 +243,7 @@ Keep the tone calm, encouraging, and personal — like a caring friend. Referenc
               </div>
               <div style={styles.reportDate}>
                 {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                {fromCache && <span style={{ ...styles.cachedBadge, marginLeft: 8 }}>from cache</span>}
               </div>
             </div>
           </div>
@@ -172,7 +253,7 @@ Keep the tone calm, encouraging, and personal — like a caring friend. Referenc
       )}
 
       {!insight && !loading && (
-        <div className="ai-s" style={{ ...styles.emptyCard, animationDelay: "0.1s", maxWidth: 680 }}>
+        <div style={{ ...styles.emptyCard, maxWidth: 680 }}>
           <div style={{ fontSize: 40, marginBottom: 10 }}>💡</div>
           <p style={styles.emptyText}>
             Your AI report will appear here. The more check-ins you have, the more personalized and insightful your report will be!
@@ -192,7 +273,11 @@ const styles = {
     border: "1px solid #e0dbd4",
   },
   cardLabel: { fontSize: 15, fontWeight: 700, color: "#3d3554", marginBottom: 8 },
-  cardDesc: { margin: "0 0 18px", fontSize: 14, color: "#4a4460", lineHeight: 1.6 },
+  cardDesc: { margin: "0 0 18px", fontSize: 14, color: "#4a4460", lineHeight: 1.6, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  cachedBadge: {
+    fontSize: 11, color: "#7dba9a", background: "#eaf5ee",
+    padding: "2px 8px", borderRadius: 99, fontWeight: 600, flexShrink: 0,
+  },
   typeRow: { display: "flex", gap: 10, marginBottom: 14 },
   typeBtn: {
     flex: 1, padding: "12px", borderRadius: 10,
@@ -213,7 +298,7 @@ const styles = {
   errorBox: {
     background: "#fdf5f5", border: "1px solid #f5c6c6",
     borderRadius: 12, padding: "12px 16px",
-    color: "#c0392b", fontSize: 14, marginBottom: 14, maxWidth: 680,
+    color: "#c0392b", fontSize: 14, marginBottom: 14,
   },
   reportCard: {
     background: "#faf9f6", borderRadius: 18, padding: "24px 22px",
@@ -222,7 +307,7 @@ const styles = {
   },
   reportHeader: { display: "flex", alignItems: "center", gap: 12, marginBottom: 14 },
   reportTitle: { fontSize: 16, fontWeight: 700, color: "#3d3554" },
-  reportDate: { fontSize: 12, color: "#6b6380", marginTop: 2 },
+  reportDate: { fontSize: 12, color: "#6b6380", marginTop: 2, display: "flex", alignItems: "center" },
   reportDivider: { height: 1, background: "#ede9f5", marginBottom: 18 },
   insightHeading: {
     color: "#7c6fa0", fontSize: 12, fontWeight: 700,

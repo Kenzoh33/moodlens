@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { auth } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 
-export default function AuthPage() {
+export default function AuthPage({ onDemo }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -12,6 +12,10 @@ export default function AuthPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    if (!auth) {
+      setError("Firebase is not configured. Add your .env.local file to enable auth.");
+      return;
+    }
     setLoading(true);
     try {
       if (isLogin) {
@@ -112,6 +116,19 @@ export default function AuthPage() {
               {isLogin ? "Sign up free" : "Sign in"}
             </span>
           </p>
+
+          {onDemo && (
+            <div style={styles.demoRow}>
+              <div style={styles.dividerLine} />
+              <span style={styles.dividerText}>or</span>
+              <div style={styles.dividerLine} />
+            </div>
+          )}
+          {onDemo && (
+            <button className="auth-btn" style={styles.demoBtn} type="button" onClick={onDemo}>
+              👀 View Demo (no account needed)
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -177,4 +194,14 @@ const styles = {
   },
   toggle: { marginTop: 20, fontSize: 14, color: "#4a4460", textAlign: "center" },
   link: { color: "#7c6fa0", cursor: "pointer", fontWeight: 700, transition: "color 0.15s" },
+  demoRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 16 },
+  dividerLine: { flex: 1, height: 1, background: "#e0dbd4" },
+  dividerText: { fontSize: 12, color: "#a09ab0", fontWeight: 500 },
+  demoBtn: {
+    padding: "11px", borderRadius: 10, border: "1.5px solid #e0dbd4",
+    background: "transparent", color: "#6b6380",
+    fontSize: 14, fontWeight: 600, cursor: "pointer",
+    transition: "all 0.2s", marginTop: 0, width: "100%",
+    boxShadow: "none",
+  },
 };
