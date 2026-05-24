@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 
 const apiKey = process.env.REACT_APP_FIREBASE_API_KEY;
 
@@ -20,5 +20,11 @@ if (apiKey) {
   };
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
-  db = getFirestore(app);
+  // Offline persistence: serves Firestore data from IndexedDB instantly on
+  // repeat visits, then syncs with the server in the background.
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  });
 }

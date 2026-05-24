@@ -9,8 +9,10 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // auth.currentUser is synchronously available from Firebase's local cache
+  // when the user was previously signed in — use it to skip the loading splash.
+  const [currentUser, setCurrentUser] = useState(auth?.currentUser ?? null);
+  const [loading, setLoading] = useState(!auth?.currentUser);
 
   useEffect(() => {
     if (!auth) {
